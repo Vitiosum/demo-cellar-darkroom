@@ -132,13 +132,15 @@
       <article class="cc-card rule">
         <p class="cc-card__label">AWS SDK v3 · src/cellar.js</p>
         <h3 class="cc-card__title">The only Clever-specific lines</h3>
-        <pre class="code"><span class="c">// a standard S3 client, pointed at Cellar</span>
+        <pre class="code"><span class="c">// a standard S3 client, for Cellar</span>
+const env = process.env;
 new S3Client({
-  endpoint: <b>process.env.CELLAR_ADDON_HOST</b>,
-  region: 'us-east-1', <span class="c">// unused by Cellar</span>
+  endpoint: <b>env.CELLAR_ADDON_HOST</b>,
+  region: 'us-east-1', <span class="c">// unused</span>
   credentials: {
-    accessKeyId: <b>process.env.CELLAR_ADDON_KEY_ID</b>,
-    secretAccessKey: <b>process.env.CELLAR_ADDON_KEY_SECRET</b>,
+    accessKeyId: <b>env.CELLAR_ADDON_KEY_ID</b>,
+    secretAccessKey:
+      <b>env.CELLAR_ADDON_KEY_SECRET</b>,
   },
 });</pre>
       </article>
