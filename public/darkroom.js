@@ -346,7 +346,7 @@ $('#proofBtn').addEventListener('click', runProofs);
 /* ---------- Start ---------- */
 renderPlatform();
 $('#publicBase').textContent = boot.publicBase ? `${short(boot.publicBase)}/prints/` : 'no bucket';
-if (boot.problem && !boot.bucket) {
+if (boot.problem) {
   $('#bootProblem').textContent = boot.problem;
   $('#bootProblem').hidden = false;
 }

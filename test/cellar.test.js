@@ -55,6 +55,10 @@ test('slip, browser-style POST, develop, list, sweep', { skip: !endpoint && 'set
   await fetch(orphan.url, { method: 'POST', body: form3 });
   assert.equal(await cellar.sweep(), 0);
   assert.equal(await cellar.sweep(Date.now() + 11 * 60_000), 1);
+
+  // Teardown empties the bucket and deletes it, and does nothing the second time.
+  assert.equal(await cellar.teardown(), 6);
+  assert.equal(await cellar.teardown(), 0);
 });
 
 // The anonymous checks, with Cellar's answers played back: no network, no local S3 needed.

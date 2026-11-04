@@ -59,6 +59,14 @@ It runs 15 checks from the outside, like a browser and like a stranger: CORS pre
 
 On a custom domain, add its origin to `CORS_ORIGINS` (`https://photos.example.com`) and `clever restart`: the rule is rewritten at boot.
 
+To take the demo down: Cellar only deletes an add-on whose buckets are empty, and only the app holds the keys. So the app empties its own bucket first:
+
+```bash
+clever env set CELLAR_TEARDOWN true && clever restart   # logs: "[cellar] Teardown: N objects deleted, bucket … deleted"
+clever addon delete <addon_id>
+clever delete
+```
+
 ## Variables
 
 | Variable | Set by | Role |
@@ -69,6 +77,7 @@ On a custom domain, add its origin to `CORS_ORIGINS` (`https://photos.example.co
 | `CC_HEALTH_CHECK_PATH` | you | `/health` |
 | `CORS_ORIGINS` | optional | Extra origins allowed to upload, comma-separated (custom domains) |
 | `CELLAR_BUCKET` | optional | Forces the bucket name |
+| `CELLAR_TEARDOWN` | optional, at the end | `true`: at boot, empty the bucket and delete it instead of serving the darkroom |
 
 The "Running on Clever Cloud" panel shows `CC_APP_NAME`, `APP_ID`, `INSTANCE_NUMBER`, `INSTANCE_TYPE`, `CC_PRETTY_INSTANCE_NAME`, `CC_COMMIT_ID` and `CC_DEPLOYMENT_ID`, and nothing else. `APP_ID` also gives the app's default domain, the origin of the CORS rule.
 
@@ -82,7 +91,7 @@ The line holds 40 prints; the oldest come down with their negatives. A negative 
 
 ```
 server.js            HTTP routes, CSP with the bucket's origin, rate limit, boot (bucket, CORS, policy, seed)
-src/cellar.js        every Cellar call, AWS SDK v3: presigned POST and GET, develop, probes, sweep
+src/cellar.js        every Cellar call, AWS SDK v3: presigned POST and GET, develop, probes, sweep, teardown
 src/rules.js         the rules as data: bucket name, CORS rule, bucket policy, keys, magic numbers
 public/darkroom.js   the browser side: slip, multipart POST to Cellar with progress, develop, the line, the checks
 public/photogram.js  cameraless photographs drawn as SVG, shared by the seed and the browser

@@ -68,6 +68,12 @@ export function createApp({ env = process.env, cellar = undefined, origins = app
   async function boot(attempt = 1) {
     if (!store) return;
     try {
+      if (env.CELLAR_TEARDOWN === 'true') {
+        const n = await store.teardown();
+        state.problem = `Torn down: ${n} objects and the bucket ${store.bucket} deleted. The add-on can be deleted now`;
+        log.log(`[cellar] Teardown: ${n} objects deleted, bucket ${store.bucket} deleted`);
+        return;
+      }
       state.steps = await store.prepare();
       const seeded = await store.seed(SEEDS.map((s) => photogram(s)));
       if (seeded) state.steps.push(`Seed: ${seeded} photograms developed`);
@@ -105,7 +111,7 @@ export function createApp({ env = process.env, cellar = undefined, origins = app
       slipSeconds: SLIP_SECONDS,
       maxPrints: MAX_PRINTS,
       sniffBytes: SNIFF_BYTES,
-      problem: state.problem,
+      problem: state.ready ? null : state.problem,
       platform,
     };
     return (await template).replace('{{BOOT}}', escapeScript(boot));

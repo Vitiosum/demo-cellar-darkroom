@@ -1,7 +1,7 @@
 // Every call the app makes to Cellar, with the standard AWS SDK for JavaScript v3.
 // Nothing here is specific to Clever Cloud but the endpoint and the CELLAR_ADDON_* variable names.
 import {
-  S3Client, CreateBucketCommand, HeadBucketCommand, PutBucketCorsCommand, GetBucketCorsCommand,
+  S3Client, CreateBucketCommand, DeleteBucketCommand, HeadBucketCommand, PutBucketCorsCommand, GetBucketCorsCommand,
   PutBucketPolicyCommand, GetBucketPolicyCommand, PutObjectCommand, HeadObjectCommand, GetObjectCommand,
   CopyObjectCommand, DeleteObjectsCommand, ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
@@ -196,10 +196,25 @@ export function createCellar(cfg, { origins, client = s3Client(cfg), fetchImpl =
     return drawings.length;
   }
 
+  // Before deleting the add-on: Cellar only deletes an add-on whose buckets are empty.
+  async function teardown() {
+    let count = 0;
+    try {
+      for (let all = await listPrefix(''); all.length; all = await listPrefix('')) {
+        for (let i = 0; i < all.length; i += 1000) await remove(all.slice(i, i + 1000).map((o) => o.key));
+        count += all.length;
+      }
+      await client.send(new DeleteBucketCommand({ Bucket }));
+    } catch (err) {
+      if (errorCode(err) !== 'NoSuchBucket') throw err;
+    }
+    return count;
+  }
+
   async function ping() {
     await client.send(new HeadBucketCommand({ Bucket }));
     return true;
   }
 
-  return { bucket: Bucket, publicBase: cfg.publicBase, publicOrigin: cfg.publicOrigin, prepare, rules, slip, develop, listPrints, sweep, negativeLink, probes, seed, ping };
+  return { bucket: Bucket, publicBase: cfg.publicBase, publicOrigin: cfg.publicOrigin, prepare, rules, slip, develop, listPrints, sweep, negativeLink, probes, seed, teardown, ping };
 }
