@@ -1,0 +1,22 @@
+{
+  "name": "demo-cellar-darkroom",
+  "version": "1.0.0",
+  "description": "The Darkroom: browsers upload straight to a Cellar bucket with presigned POST, a bucket policy hangs the prints in public. A Clever Cloud demo.",
+  "license": "MIT",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": "24"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test",
+    "prove": "node scripts/prove.mjs",
+    "shots": "node scripts/shots.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1161.0",
+    "@aws-sdk/s3-presigned-post": "3.1161.0",
+    "@aws-sdk/s3-request-presigner": "3.1161.0"
+  }
+}
