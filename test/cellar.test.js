@@ -75,3 +75,24 @@ test('probes: 200 on a print, 403 AccessDenied on its negative, 200 presigned', 
   assert.deepEqual(probes.map((p) => [p.status, p.code, p.ok]), [[200, null, true], [403, 'AccessDenied', true], [200, null, true]]);
   assert.ok(probes[2].url.endsWith('?X-Amz-…'));
 });
+
+// A file swapped between the check and the copy is thrown away, not hung on the line.
+test('develop: refuses a negative that changed between the check and the copy', async () => {
+  const { s3Client } = await import('../src/cellar.js');
+  const cfg = cellarConfig({ CELLAR_ADDON_HOST: 'cellar.example', CELLAR_ADDON_KEY_ID: 'test', CELLAR_ADDON_KEY_SECRET: 'test' });
+  const client = s3Client(cfg);
+  const deleted = [];
+  const key = 'darkroom/0aaaaaaa-0000-4000-8000-000000000000.jpg';
+  client.send = async (cmd) => {
+    switch (cmd.constructor.name) {
+      case 'HeadObjectCommand': return { ContentLength: JPEG.length, ContentType: 'image/jpeg', ETag: '"checked"' };
+      case 'GetObjectCommand': return { ETag: '"checked"', Body: { transformToByteArray: async () => JPEG.subarray(0, 16) } };
+      case 'CopyObjectCommand': return { CopyObjectResult: { ETag: '"swapped"' } };
+      case 'DeleteObjectsCommand': deleted.push(...cmd.input.Delete.Objects.map((o) => o.Key)); return {};
+      default: return { Contents: [] };
+    }
+  };
+  const out = await createCellar(cfg, { origins: [], client }).develop(key);
+  assert.equal(out.status, 409);
+  assert.deepEqual(deleted.sort(), [key, key.replace('darkroom/', 'prints/')].sort());
+});

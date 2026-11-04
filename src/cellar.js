@@ -122,12 +122,20 @@ export function createCellar(cfg, { origins, client = s3Client(cfg), fetchImpl =
       return { status: 422, error: `The file is not a ${k.type}`, trace };
     }
     const target = printKey(k.id, k.ext);
+    const checked = head.ETag?.replaceAll('"', '');
     const copy = await client.send(new CopyObjectCommand({
       Bucket, Key: target, CopySource: `${Bucket}/${key}`,
       MetadataDirective: 'REPLACE', ContentType: k.type, CacheControl: 'public, max-age=31536000, immutable',
     }));
     const etag = copy.CopyObjectResult?.ETag?.replaceAll('"', '');
     trace.push({ call: 'CopyObject', target: `${key} → ${target}`, appBytes: 0, result: `ETag ${etag}` });
+    // The slip stays valid 60 s: a second upload could swap the file between the check and the copy.
+    // The copy keeps the ETag of what it copied, so a different one means it is not the checked file.
+    if (first.ETag?.replaceAll('"', '') !== checked || etag !== checked) {
+      await remove([target, key]);
+      trace.push({ call: 'DeleteObjects', target: `${target}, ${key}`, appBytes: 0, result: 'the negative changed during development' });
+      return { status: 409, error: 'The negative changed while it was being developed', trace };
+    }
     await trim();
     return {
       status: 201,
