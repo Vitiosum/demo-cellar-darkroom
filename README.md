@@ -12,7 +12,9 @@
 
 **Run it yourself.** The hosted demo was taken down after the presales review (November 2026). The steps in [Deploy on Clever Cloud](#deploy-on-clever-cloud) recreate it from scratch in about 5 minutes. `npm run prove` then checks the whole chain from the outside.
 
-## What Cellar does in the demo
+## What Cellar does here
+
+![One print, two objects: the public print, the private negative, and a presigned link counting down](docs/print.png)
 
 | Where | Cellar feature (S3 API) | What you see |
 |---|---|---|
