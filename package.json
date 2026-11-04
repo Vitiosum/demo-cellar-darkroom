@@ -11,8 +11,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "prove": "node scripts/prove.mjs",
-    "shots": "node scripts/shots.mjs"
+    "prove": "node scripts/prove.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1161.0",

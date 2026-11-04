@@ -171,8 +171,9 @@ export function createCellar(cfg, { origins, client = s3Client(cfg), fetchImpl =
     ];
     return Promise.all(tries.map(async (t) => {
       const res = await fetchImpl(t.url, { headers: { Range: 'bytes=0-0' }, redirect: 'manual', signal: AbortSignal.timeout(5000) });
-      const body = res.status >= 400 ? await res.text() : '';
-      await res.body?.cancel?.();
+      let body = '';
+      if (res.status >= 400) body = await res.text();
+      else await res.body?.cancel();
       const code = /<Code>([^<]+)<\/Code>/.exec(body)?.[1] ?? null;
       const status = res.status === 206 ? 200 : res.status;
       return { name: t.name, url: t.url.split('?')[0] + (t.url.includes('?') ? '?X-Amz-…' : ''), status, code, expect: t.expect, ok: status === t.expect, why: t.why };

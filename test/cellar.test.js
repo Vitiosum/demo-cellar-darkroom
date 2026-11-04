@@ -56,3 +56,18 @@ test('slip, browser-style POST, develop, list, sweep', { skip: !endpoint && 'set
   assert.equal(await cellar.sweep(), 0);
   assert.equal(await cellar.sweep(Date.now() + 11 * 60_000), 1);
 });
+
+// The anonymous checks, with Cellar's answers played back: no network, no local S3 needed.
+test('probes: 200 on a print, 403 AccessDenied on its negative, 200 presigned', async () => {
+  const { s3Client } = await import('../src/cellar.js');
+  const cfg = cellarConfig({ CELLAR_ADDON_HOST: 'cellar.example', CELLAR_ADDON_KEY_ID: 'test', CELLAR_ADDON_KEY_SECRET: 'test' });
+  const client = s3Client(cfg);
+  const id = '0aaaaaaa-0000-4000-8000-000000000000';
+  client.send = async (cmd) => ({ Contents: [{ Key: `${cmd.input.Prefix.startsWith('prints/') ? 'prints/' : 'darkroom/'}${id}.jpg`, Size: 10, LastModified: new Date() }] });
+  const fetchImpl = async (url) => (url.includes('/darkroom/') && !url.includes('X-Amz-Signature')
+    ? new Response('<?xml version="1.0"?><Error><Code>AccessDenied</Code></Error>', { status: 403 })
+    : new Response('x', { status: 206 }));
+  const probes = await createCellar(cfg, { origins: [], client, fetchImpl }).probes();
+  assert.deepEqual(probes.map((p) => [p.status, p.code, p.ok]), [[200, null, true], [403, 'AccessDenied', true], [200, null, true]]);
+  assert.ok(probes[2].url.endsWith('?X-Amz-…'));
+});
