@@ -112,7 +112,22 @@ export function createCellar(cfg, { origins, client = s3Client(cfg), fetchImpl =
       throw err;
     }
     trace.push({ call: 'HeadObject', target: key, appBytes: 0, result: `${head.ContentLength} bytes, ${head.ContentType}` });
-    const first = await client.send(new GetObjectCommand({ Bucket, Key: key, Range: `bytes=0-${SNIFF_BYTES - 1}` }));
+    // The slip stays valid 60 s, so a second upload could swap the file during development.
+    // Every later call is conditional on the ETag seen here: Cellar answers 412 if the file changed.
+    const checked = head.ETag?.replaceAll('"', '');
+    const changed = async () => {
+      await remove([key]);
+      trace.push({ call: 'DeleteObject', target: key, appBytes: 0, result: 'the negative changed during development' });
+      return { status: 409, error: 'The negative changed while it was being developed', trace };
+    };
+    if (!checked) return changed();
+    let first;
+    try {
+      first = await client.send(new GetObjectCommand({ Bucket, Key: key, Range: `bytes=0-${SNIFF_BYTES - 1}`, IfMatch: head.ETag }));
+    } catch (err) {
+      if (err?.$metadata?.httpStatusCode === 412) return changed();
+      throw err;
+    }
     const bytes = Buffer.from(await first.Body.transformToByteArray());
     const found = sniff(bytes);
     trace.push({ call: `GetObject Range: bytes=0-${SNIFF_BYTES - 1}`, target: key, appBytes: bytes.length, result: `${hex(bytes)} → ${found ?? 'not an image'}` });
@@ -122,19 +137,22 @@ export function createCellar(cfg, { origins, client = s3Client(cfg), fetchImpl =
       return { status: 422, error: `The file is not a ${k.type}`, trace };
     }
     const target = printKey(k.id, k.ext);
-    const checked = head.ETag?.replaceAll('"', '');
-    const copy = await client.send(new CopyObjectCommand({
-      Bucket, Key: target, CopySource: `${Bucket}/${key}`,
-      MetadataDirective: 'REPLACE', ContentType: k.type, CacheControl: 'public, max-age=31536000, immutable',
-    }));
+    let copy;
+    try {
+      copy = await client.send(new CopyObjectCommand({
+        Bucket, Key: target, CopySource: `${Bucket}/${key}`, CopySourceIfMatch: head.ETag,
+        MetadataDirective: 'REPLACE', ContentType: k.type, CacheControl: 'public, max-age=31536000, immutable',
+      }));
+    } catch (err) {
+      if (err?.$metadata?.httpStatusCode === 412) return changed();
+      throw err;
+    }
     const etag = copy.CopyObjectResult?.ETag?.replaceAll('"', '');
     trace.push({ call: 'CopyObject', target: `${key} → ${target}`, appBytes: 0, result: `ETag ${etag}` });
-    // The slip stays valid 60 s: a second upload could swap the file between the check and the copy.
-    // The copy keeps the ETag of what it copied, so a different one means it is not the checked file.
+    // Safety net, should a server ignore the condition: the copy keeps the ETag of what it copied.
     if (first.ETag?.replaceAll('"', '') !== checked || etag !== checked) {
-      await remove([target, key]);
-      trace.push({ call: 'DeleteObjects', target: `${target}, ${key}`, appBytes: 0, result: 'the negative changed during development' });
-      return { status: 409, error: 'The negative changed while it was being developed', trace };
+      await remove([target]);
+      return changed();
     }
     await trim();
     return {

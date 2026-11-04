@@ -76,23 +76,44 @@ test('probes: 200 on a print, 403 AccessDenied on its negative, 200 presigned', 
   assert.ok(probes[2].url.endsWith('?X-Amz-…'));
 });
 
-// A file swapped between the check and the copy is thrown away, not hung on the line.
-test('develop: refuses a negative that changed between the check and the copy', async () => {
-  const { s3Client } = await import('../src/cellar.js');
-  const cfg = cellarConfig({ CELLAR_ADDON_HOST: 'cellar.example', CELLAR_ADDON_KEY_ID: 'test', CELLAR_ADDON_KEY_SECRET: 'test' });
-  const client = s3Client(cfg);
-  const deleted = [];
-  const key = 'darkroom/0aaaaaaa-0000-4000-8000-000000000000.jpg';
-  client.send = async (cmd) => {
-    switch (cmd.constructor.name) {
-      case 'HeadObjectCommand': return { ContentLength: JPEG.length, ContentType: 'image/jpeg', ETag: '"checked"' };
-      case 'GetObjectCommand': return { ETag: '"checked"', Body: { transformToByteArray: async () => JPEG.subarray(0, 16) } };
-      case 'CopyObjectCommand': return { CopyObjectResult: { ETag: '"swapped"' } };
-      case 'DeleteObjectsCommand': deleted.push(...cmd.input.Delete.Objects.map((o) => o.Key)); return {};
-      default: return { Contents: [] };
-    }
+// A file swapped during development never reaches prints/.
+function stubDevelop(copyAnswer) {
+  return async () => {
+    const { s3Client } = await import('../src/cellar.js');
+    const cfg = cellarConfig({ CELLAR_ADDON_HOST: 'cellar.example', CELLAR_ADDON_KEY_ID: 'test', CELLAR_ADDON_KEY_SECRET: 'test' });
+    const client = s3Client(cfg);
+    const calls = [];
+    client.send = async (cmd) => {
+      calls.push([cmd.constructor.name, cmd.input]);
+      switch (cmd.constructor.name) {
+        case 'HeadObjectCommand': return { ContentLength: JPEG.length, ContentType: 'image/jpeg', ETag: '"checked"' };
+        case 'GetObjectCommand': return { ETag: '"checked"', Body: { transformToByteArray: async () => JPEG.subarray(0, 16) } };
+        case 'CopyObjectCommand': return copyAnswer();
+        default: return { Contents: [] };
+      }
+    };
+    const key = 'darkroom/0aaaaaaa-0000-4000-8000-000000000000.jpg';
+    const out = await createCellar(cfg, { origins: [], client }).develop(key);
+    const deleted = calls.filter(([n]) => n === 'DeleteObjectsCommand').flatMap(([, i]) => i.Delete.Objects.map((o) => o.Key));
+    return { out, calls, deleted, key };
   };
-  const out = await createCellar(cfg, { origins: [], client }).develop(key);
+}
+
+test('develop: every call after the check is conditional on its ETag', async () => {
+  const { out, calls } = await stubDevelop(() => ({ CopyObjectResult: { ETag: '"checked"' } }))();
+  assert.equal(out.status, 201);
+  assert.equal(calls.find(([n]) => n === 'GetObjectCommand')[1].IfMatch, '"checked"');
+  assert.equal(calls.find(([n]) => n === 'CopyObjectCommand')[1].CopySourceIfMatch, '"checked"');
+});
+
+test('develop: Cellar refuses the copy of a swapped file (412), nothing is published', async () => {
+  const { out, deleted, key } = await stubDevelop(() => { throw Object.assign(new Error('PreconditionFailed'), { $metadata: { httpStatusCode: 412 } }); })();
+  assert.equal(out.status, 409);
+  assert.deepEqual(deleted, [key]);
+});
+
+test('develop: a server that ignored the condition still gets the print thrown away', async () => {
+  const { out, deleted, key } = await stubDevelop(() => ({ CopyObjectResult: { ETag: '"swapped"' } }))();
   assert.equal(out.status, 409);
   assert.deepEqual(deleted.sort(), [key, key.replace('darkroom/', 'prints/')].sort());
 });
