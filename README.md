@@ -2,7 +2,7 @@
 
 > A darkroom where visitors expose photos and the app never touches them. The browser asks the app for a **presigned POST** (one key, one type, 5 MB max, valid 60 seconds), then sends the file **straight to a Cellar bucket**: the app reads 16 bytes of it, at most, to check that it is an image. The original, the *negative*, stays in a private `darkroom/` prefix. The app copies it inside Cellar to `prints/`, where a **bucket policy** lets anyone read it: the drying line loads every print from Cellar, not from the app. The app sets the bucket's **CORS** rules and policy itself at boot, reads them back from Cellar on the page, and five live checks ask Cellar to prove each rule: 200, 403, 200, 400, 403. Standard AWS SDK v3; only the endpoint and the variable names belong to Clever Cloud.
 
-![The Darkroom run locally: a photogram goes straight to the bucket, 16 bytes through the app, the print hangs on the drying line and the five live checks answer 200, 403, 200, 400, 403](docs/tour.gif)
+![The Darkroom run locally: Draw a photogram fills the four steps of the enlarger, 16 bytes through the app and the file straight into the bucket, the new print develops on the drying line, then the five live checks answer 200, 403, 200, 400, 403. The upload and the checks take under 0.3 s each and are played back six times slower](docs/tour.gif)
 
 ![The enlarger after an upload: the slip, the exposure straight to Cellar, the development, the print on the line](docs/darkroom.png)
 
